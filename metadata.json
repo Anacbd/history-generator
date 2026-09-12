@@ -1,0 +1,6 @@
+{
+  "name": "Gerador de Histórias Infantis & Storyboard",
+  "description": "Gerador de histórias infantis com ilustrações automáticas, formato Jornalzinho infantil imprimível, narração em voz calma e prompts de storyboard usando a API do Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
