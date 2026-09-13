@@ -9,8 +9,8 @@ Aplicativo interativo para criação de histórias infantis personalizadas com i
 - **Narrativa Estruturada em 3 Capítulos**: Gera uma historinha infantil completa, com começo, meio e fim, sinopse acolhedora e lição moral adaptada para a faixa etária.
 - **Ilustrações Automáticas**: Criação de imagens lúdicas de alta resolução para cada cena da história com base no estilo artístico escolhido (Aquarela, 3D Pixar, Giz de Cera, Livro Clássico, etc.).
 - **Prompts de Storyboard em Inglês**: Para quem deseja gerar imagens externas no Midjourney v6 ou DALL-E 3, a IA cria prompts detalhados com descrição de iluminação, paleta de cores e consistência visual da personagem.
-- **Narração com Voz Acolhedora**: Leitura em voz alta com controles de reprodução (play, pause, velocidade e tom), proporcionando uma experiência calma e agradável para crianças na hora de dormir.
-- **Jornalzinho Infantil Imprimível**: Layout especial diagramado como página de jornalzinho/revista infantil com espaço para colorir, moral da história e pronto para impressão ou salvar em PDF.
+- **Narração com Voz Natural Gerada por IA**: Síntese de áudio humanizada de alta qualidade com o Gemini TTS e fallback neural, oferecendo uma voz doce feminina ou calma masculina, ritmo sereno para hora de dormir e sem o aspecto robótico dos navegadores antigos.
+- **Livro Infantil Ilustrado Imprimível**: Layout especial em formato de livro infantil com capa mágica, páginas de capítulos ilustradas lado a lado com capitular decorada, modo de folhear página por página, espaço de dedicatória para a criança e pronto para impressão ou salvar em PDF.
 - **Consistência de Personagem**: Criação de um guia visual de traços e vestimentas para manter a mesma identidade visual do protagonista em todas as cenas.
 - **Versão Python / Streamlit inclusa**: Acompanha o script `app.py` com implementação completa em Python para execução local com Streamlit.
 

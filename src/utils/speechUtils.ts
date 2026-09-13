@@ -1,5 +1,67 @@
 import { VoiceGender, VoiceSettings, StoryPace } from "../types";
 
+export interface AISpeechResponse {
+  audioData: string; // data URI
+  mimeType: string;
+  provider: "gemini-tts" | "neural-pt";
+  voiceName: string;
+}
+
+// Cache local no navegador para evitar requisições redundantes
+const clientAudioCache = new Map<string, AISpeechResponse>();
+
+/**
+ * Busca áudio de voz natural gerado por IA no backend
+ */
+export async function fetchAISpeech(
+  text: string,
+  gender: VoiceGender = "female",
+  pace: StoryPace = "storyteller"
+): Promise<AISpeechResponse> {
+  const cleanKey = `${gender}:${pace}:${text.trim()}`;
+  const cached = clientAudioCache.get(cleanKey);
+  if (cached) {
+    return cached;
+  }
+
+  const response = await fetch("/api/generate-speech", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      text,
+      gender,
+      pace,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `Falha na requisição de áudio: status ${response.status}`);
+  }
+
+  const data: AISpeechResponse = await response.json();
+  clientAudioCache.set(cleanKey, data);
+  return data;
+}
+
+/**
+ * Velocidade de reprodução otimizada para o clima do conto
+ */
+export function getPlaybackRateForPace(pace: StoryPace): number {
+  switch (pace) {
+    case "bedtime":
+      return 0.88; // Bem calmo e relaxante para a hora de dormir
+    case "storyteller":
+      return 0.96; // Doce, acolhedor e envolvente
+    case "normal":
+      return 1.05; // Fluido
+    default:
+      return 0.96;
+  }
+}
+
 export interface VoiceOption {
   voice: SpeechSynthesisVoice;
   displayName: string;
@@ -7,19 +69,8 @@ export interface VoiceOption {
   isNatural: boolean;
 }
 
-const FEMALE_NAMES = [
-  "luciana", "leticia", "letícia", "yara", "maria", "francisca",
-  "joana", "camila", "raquel", "vitória", "vitoria", "zira",
-  "google português", "eloise", "heloisa", "fernanda", "ines", "inês"
-];
-
-const MALE_NAMES = [
-  "felipe", "daniel", "antonio", "antônio", "ricardo", "tiago",
-  "jorge", "david", "duarte"
-];
-
 /**
- * Identifica e classifica as vozes em português instaladas no navegador/sistema
+ * Fallback: Identifica e classifica as vozes em português instaladas no sistema
  */
 export function getAvailablePortugueseVoices(): VoiceOption[] {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) {
@@ -31,24 +82,37 @@ export function getAvailablePortugueseVoices(): VoiceOption[] {
     v.lang.toLowerCase().startsWith("pt")
   );
 
-  // Se não encontrar nenhuma voz em PT, pega as disponíveis como fallback
   const candidateVoices = ptVoices.length > 0 ? ptVoices : allVoices;
+
+  const FEMALE_NAMES = [
+    "luciana", "leticia", "letícia", "yara", "maria", "francisca",
+    "joana", "camila", "raquel", "vitória", "vitoria", "zira",
+    "google português", "eloise", "heloisa", "fernanda", "ines", "inês"
+  ];
+
+  const MALE_NAMES = [
+    "felipe", "daniel", "antonio", "antônio", "ricardo", "tiago",
+    "jorge", "david", "duarte"
+  ];
 
   return candidateVoices.map((v) => {
     const nameLower = v.name.toLowerCase();
     const isExplicitMale =
-      nameLower.includes("male") && !nameLower.includes("female") ||
+      (nameLower.includes("male") && !nameLower.includes("female")) ||
       MALE_NAMES.some((m) => nameLower.includes(m));
 
     const isExplicitFemale =
       nameLower.includes("female") ||
       FEMALE_NAMES.some((f) => nameLower.includes(f));
 
-    // Heurística padrão caso o nome não traga gênero explícito
     const isFemale = isExplicitFemale || (!isExplicitMale && !nameLower.includes("man"));
-    const isNatural = nameLower.includes("natural") || nameLower.includes("online") || nameLower.includes("neural") || nameLower.includes("google");
+    const isNatural =
+      nameLower.includes("natural") ||
+      nameLower.includes("online") ||
+      nameLower.includes("neural") ||
+      nameLower.includes("google");
 
-    let cleanName = v.name
+    const cleanName = v.name
       .replace(/Microsoft/g, "")
       .replace(/Google/g, "Google")
       .replace(/Online \(Natural\)/g, "Natural")
@@ -66,7 +130,7 @@ export function getAvailablePortugueseVoices(): VoiceOption[] {
 }
 
 /**
- * Encontra a melhor voz recomendada com base no gênero e nos recursos do navegador
+ * Encontra a melhor voz recomendada do sistema caso a IA não responda
  */
 export function findBestVoice(
   voices: VoiceOption[],
@@ -75,7 +139,6 @@ export function findBestVoice(
 ): SpeechSynthesisVoice | null {
   if (voices.length === 0) return null;
 
-  // 1. Se o usuário selecionou uma voz específica manualmente
   if (preferredVoiceURI) {
     const found = voices.find((v) => v.voice.voiceURI === preferredVoiceURI);
     if (found) return found.voice;
@@ -85,34 +148,25 @@ export function findBestVoice(
   const matchingGender = voices.filter((v) => v.isFemale === isTargetFemale);
 
   if (matchingGender.length > 0) {
-    // Dá preferência para vozes naturais/neurais
     const natural = matchingGender.find((v) => v.isNatural);
     return natural ? natural.voice : matchingGender[0].voice;
   }
 
-  // Fallback para qualquer voz disponível
   return voices[0].voice;
 }
 
-/**
- * Calcula taxa (rate) e pitch (tom) ideais para conto infantil
- */
 export function getAcousticParameters(settings: VoiceSettings, hasNaturalVoice: boolean) {
-  // Ritmo da leitura
-  let rate = 0.90; // Contação ideal de histórias
+  let rate = 0.90;
   if (settings.pace === "bedtime") {
-    rate = 0.82; // Mais pausado, suave para hora de dormir
+    rate = 0.82;
   } else if (settings.pace === "normal") {
-    rate = 0.98; // Ritmo mais ágil
+    rate = 0.98;
   }
 
-  // Tom e ressonância emocional para crianças
   let pitch = 1.0;
   if (settings.gender === "female") {
-    // Voz feminina suave, doce, acolhedora
     pitch = hasNaturalVoice ? 1.02 : 1.08;
   } else {
-    // Voz masculina serena, calma, protetora
     pitch = hasNaturalVoice ? 0.95 : 0.86;
   }
 

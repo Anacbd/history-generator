@@ -199,7 +199,7 @@ export const StoryForm: React.FC<StoryFormProps> = ({ onSubmit, isLoading }) => 
               </span>
             </span>
             <p className="text-xs text-amber-800/90 mt-0.5">
-              Cria automaticamente as pinturas dos 3 capítulos para ler no formato <strong>Jornalzinho Infantil</strong> e nos cartões de história.
+              Cria automaticamente as pinturas dos 3 capítulos para ler no formato <strong>Livro Infantil Ilustrado</strong> e nos cartões de história.
             </p>
           </label>
         </div>

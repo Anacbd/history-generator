@@ -2,13 +2,15 @@ import React, { useState, useEffect, useRef } from "react";
 import { Chapter, StoryFormData, StoryResponse, VoiceSettings } from "./types";
 import { StoryForm } from "./components/StoryForm";
 import { StoryboardCard } from "./components/StoryboardCard";
-import { JornalzinhoView } from "./components/JornalzinhoView";
+import { LivroInfantilView } from "./components/LivroInfantilView";
 import { PythonCodeViewer } from "./components/PythonCodeViewer";
 import { NarrationControlBar } from "./components/NarrationControlBar";
 import {
   findBestVoice,
   getAvailablePortugueseVoices,
   getAcousticParameters,
+  fetchAISpeech,
+  getPlaybackRateForPace,
 } from "./utils/speechUtils";
 import {
   Sparkles,
@@ -26,7 +28,7 @@ import {
 
 export default function App() {
   const [activeView, setActiveView] = useState<"interactive" | "python">("interactive");
-  const [storyDisplayMode, setStoryDisplayMode] = useState<"jornalzinho" | "storyboard">("jornalzinho");
+  const [storyDisplayMode, setStoryDisplayMode] = useState<"livro" | "storyboard">("livro");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastFormData, setLastFormData] = useState<StoryFormData | null>(null);
@@ -39,13 +41,19 @@ export default function App() {
     preferredVoiceURI: null,
   });
   const [isPlayingNarration, setIsPlayingNarration] = useState(false);
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [currentPlayingChapter, setCurrentPlayingChapter] = useState<number | null>(null);
   const queueIndexRef = useRef<number>(0);
   const isCancelledRef = useRef<boolean>(false);
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
 
   // Limpa áudio ao desmontar ou trocar de aba
   useEffect(() => {
     return () => {
+      if (audioElementRef.current) {
+        audioElementRef.current.pause();
+        audioElementRef.current = null;
+      }
       if (typeof window !== "undefined" && "speechSynthesis" in window) {
         window.speechSynthesis.cancel();
       }
@@ -54,15 +62,20 @@ export default function App() {
 
   const stopNarration = () => {
     isCancelledRef.current = true;
+    if (audioElementRef.current) {
+      audioElementRef.current.pause();
+      audioElementRef.current = null;
+    }
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
+    setIsLoadingAudio(false);
     setIsPlayingNarration(false);
     setCurrentPlayingChapter(null);
   };
 
-  const playSingleChapter = (chapterNumber: number) => {
-    if (!story || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  const playSingleChapter = async (chapterNumber: number) => {
+    if (!story) return;
 
     stopNarration();
     isCancelledRef.current = false;
@@ -70,111 +83,159 @@ export default function App() {
     const chapter = story.chapters.find((c) => c.chapter_number === chapterNumber);
     if (!chapter) return;
 
-    const textToSpeak = `${chapter.chapter_title}. ${chapter.story_text}`;
-    const utterance = new SpeechSynthesisUtterance(textToSpeak);
-    utterance.lang = "pt-BR";
+    const textToSpeak = `Capítulo ${chapter.chapter_number}: ${chapter.chapter_title}. ${chapter.story_text}`;
+    setIsLoadingAudio(true);
+    setCurrentPlayingChapter(chapterNumber);
 
-    const voices = getAvailablePortugueseVoices();
-    const voice = findBestVoice(voices, voiceSettings.gender, voiceSettings.preferredVoiceURI);
-    if (voice) {
-      utterance.voice = voice;
-    }
+    try {
+      const speech = await fetchAISpeech(textToSpeak, voiceSettings.gender, voiceSettings.pace);
+      if (isCancelledRef.current) return;
 
-    const { rate, pitch } = getAcousticParameters(
-      voiceSettings,
-      Boolean(voice?.name.toLowerCase().includes("natural") || voice?.name.toLowerCase().includes("google"))
-    );
-    utterance.rate = rate;
-    utterance.pitch = pitch;
-
-    utterance.onstart = () => {
+      setIsLoadingAudio(false);
       setIsPlayingNarration(true);
-      setCurrentPlayingChapter(chapterNumber);
-    };
 
-    utterance.onend = () => {
-      setIsPlayingNarration(false);
-      setCurrentPlayingChapter(null);
-    };
+      const audio = new Audio(speech.audioData);
+      audio.playbackRate = getPlaybackRateForPace(voiceSettings.pace);
+      audioElementRef.current = audio;
 
-    utterance.onerror = () => {
-      setIsPlayingNarration(false);
-      setCurrentPlayingChapter(null);
-    };
+      audio.onended = () => {
+        setIsPlayingNarration(false);
+        setCurrentPlayingChapter(null);
+        audioElementRef.current = null;
+      };
 
-    window.speechSynthesis.speak(utterance);
+      audio.onerror = () => {
+        setIsPlayingNarration(false);
+        setCurrentPlayingChapter(null);
+        audioElementRef.current = null;
+      };
+
+      await audio.play();
+    } catch (err) {
+      console.warn("Falha no áudio de IA, tentando síntese local:", err);
+      setIsLoadingAudio(false);
+
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        setIsPlayingNarration(true);
+        const utterance = new SpeechSynthesisUtterance(textToSpeak);
+        utterance.lang = "pt-BR";
+
+        const voices = getAvailablePortugueseVoices();
+        const voice = findBestVoice(voices, voiceSettings.gender, voiceSettings.preferredVoiceURI);
+        if (voice) utterance.voice = voice;
+
+        const { rate, pitch } = getAcousticParameters(
+          voiceSettings,
+          Boolean(voice?.name.toLowerCase().includes("natural") || voice?.name.toLowerCase().includes("google"))
+        );
+        utterance.rate = rate;
+        utterance.pitch = pitch;
+
+        utterance.onend = () => {
+          setIsPlayingNarration(false);
+          setCurrentPlayingChapter(null);
+        };
+        utterance.onerror = () => {
+          setIsPlayingNarration(false);
+          setCurrentPlayingChapter(null);
+        };
+
+        window.speechSynthesis.speak(utterance);
+      } else {
+        setIsPlayingNarration(false);
+        setCurrentPlayingChapter(null);
+      }
+    }
   };
 
-  const playFullStory = () => {
-    if (!story || story.chapters.length === 0 || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  const playFullStory = async () => {
+    if (!story || story.chapters.length === 0) return;
 
     stopNarration();
     isCancelledRef.current = false;
-    setIsPlayingNarration(true);
     setCurrentPlayingChapter(-1);
     queueIndexRef.current = 0;
 
-    const voices = getAvailablePortugueseVoices();
-    const voice = findBestVoice(voices, voiceSettings.gender, voiceSettings.preferredVoiceURI);
-    const { rate, pitch } = getAcousticParameters(
-      voiceSettings,
-      Boolean(voice?.name.toLowerCase().includes("natural") || voice?.name.toLowerCase().includes("google"))
-    );
-
-    const playNext = (index: number) => {
+    const playNext = async (index: number) => {
       if (isCancelledRef.current) return;
 
       if (index >= story.chapters.length) {
         // Encerramento carinhoso com a lição moral
-        const closing = new SpeechSynthesisUtterance(
-          `E assim termina a nossa história. A lição de hoje é: ${story.moral_lesson_summary}`
-        );
-        closing.lang = "pt-BR";
-        if (voice) closing.voice = voice;
-        closing.rate = rate;
-        closing.pitch = pitch;
+        const closingText = `E assim termina a nossa historinha. A lição de hoje é: ${story.moral_lesson_summary}`;
+        setIsLoadingAudio(true);
 
-        closing.onend = () => {
+        try {
+          const speech = await fetchAISpeech(closingText, voiceSettings.gender, voiceSettings.pace);
+          if (isCancelledRef.current) return;
+
+          setIsLoadingAudio(false);
+          setIsPlayingNarration(true);
+
+          const audio = new Audio(speech.audioData);
+          audio.playbackRate = getPlaybackRateForPace(voiceSettings.pace);
+          audioElementRef.current = audio;
+
+          audio.onended = () => {
+            setIsPlayingNarration(false);
+            setCurrentPlayingChapter(null);
+            audioElementRef.current = null;
+          };
+          audio.onerror = () => {
+            setIsPlayingNarration(false);
+            setCurrentPlayingChapter(null);
+            audioElementRef.current = null;
+          };
+
+          await audio.play();
+        } catch {
+          setIsLoadingAudio(false);
           setIsPlayingNarration(false);
           setCurrentPlayingChapter(null);
-        };
-        closing.onerror = () => {
-          setIsPlayingNarration(false);
-          setCurrentPlayingChapter(null);
-        };
-
-        window.speechSynthesis.speak(closing);
+        }
         return;
       }
 
       const chapter = story.chapters[index];
       setCurrentPlayingChapter(chapter.chapter_number);
+      setIsLoadingAudio(true);
 
-      const utterance = new SpeechSynthesisUtterance(
-        `Capítulo ${chapter.chapter_number}: ${chapter.chapter_title}. ${chapter.story_text}`
-      );
-      utterance.lang = "pt-BR";
-      if (voice) utterance.voice = voice;
-      utterance.rate = rate;
-      utterance.pitch = pitch;
+      const text = `Capítulo ${chapter.chapter_number}: ${chapter.chapter_title}. ${chapter.story_text}`;
 
-      utterance.onend = () => {
-        if (!isCancelledRef.current) {
-          // Pausa suave de 800ms entre capítulos
-          setTimeout(() => {
-            if (!isCancelledRef.current) {
-              playNext(index + 1);
-            }
-          }, 800);
-        }
-      };
+      try {
+        const speech = await fetchAISpeech(text, voiceSettings.gender, voiceSettings.pace);
+        if (isCancelledRef.current) return;
 
-      utterance.onerror = () => {
+        setIsLoadingAudio(false);
+        setIsPlayingNarration(true);
+
+        const audio = new Audio(speech.audioData);
+        audio.playbackRate = getPlaybackRateForPace(voiceSettings.pace);
+        audioElementRef.current = audio;
+
+        audio.onended = () => {
+          if (!isCancelledRef.current) {
+            // Pausa serena de 800ms entre capítulos
+            setTimeout(() => {
+              if (!isCancelledRef.current) {
+                playNext(index + 1);
+              }
+            }, 800);
+          }
+        };
+
+        audio.onerror = () => {
+          setIsPlayingNarration(false);
+          setCurrentPlayingChapter(null);
+          audioElementRef.current = null;
+        };
+
+        await audio.play();
+      } catch (err) {
+        console.warn("Falha na reprodução com IA, interrompendo fila:", err);
+        setIsLoadingAudio(false);
         setIsPlayingNarration(false);
         setCurrentPlayingChapter(null);
-      };
-
-      window.speechSynthesis.speak(utterance);
+      }
     };
 
     playNext(0);
@@ -510,26 +571,27 @@ export default function App() {
                   onPlayAll={playFullStory}
                   onStop={stopNarration}
                   isPlaying={isPlayingNarration}
+                  isLoadingAudio={isLoadingAudio}
                 />
 
-                {/* Seletor de Modo de Exibição: Jornalzinho Infantil vs. Storyboard & Prompts */}
+                {/* Seletor de Modo de Exibição: Livro Infantil Ilustrado vs. Storyboard & Prompts */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
                   <div className="flex items-center gap-2">
                     <button
-                      id="view-mode-jornalzinho-btn"
-                      onClick={() => setStoryDisplayMode("jornalzinho")}
+                      id="view-mode-livro-btn"
+                      onClick={() => setStoryDisplayMode("livro")}
                       className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer ${
-                        storyDisplayMode === "jornalzinho"
-                          ? "bg-amber-600 text-white shadow-sm ring-2 ring-amber-300"
+                        storyDisplayMode === "livro"
+                          ? "bg-amber-700 text-white shadow-sm ring-2 ring-amber-400"
                           : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200"
                       }`}
                     >
-                      <Newspaper className="w-4 h-4" />
-                      <span>Modo Jornalzinho Infantil</span>
+                      <BookOpen className="w-4 h-4" />
+                      <span>Modo Livro Infantil Ilustrado</span>
                       <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-semibold ${
-                        storyDisplayMode === "jornalzinho" ? "bg-amber-700 text-amber-100" : "bg-amber-100 text-amber-800"
+                        storyDisplayMode === "livro" ? "bg-amber-800 text-amber-100" : "bg-amber-100 text-amber-800"
                       }`}>
-                        Novo
+                        Mágico
                       </span>
                     </button>
 
@@ -548,20 +610,22 @@ export default function App() {
                   </div>
 
                   <span className="text-xs text-slate-500">
-                    {storyDisplayMode === "jornalzinho"
-                      ? "📰 Formato jornalzinho diagramado com ilustrações automáticas"
+                    {storyDisplayMode === "livro"
+                      ? "📖 Livro infantil ilustrado com capa dura, páginas e lição de vida"
                       : "🎬 3 Capítulos individuais com prompts para Midjourney e DALL-E"}
                   </span>
                 </div>
 
                 {/* Exibição condicional de acordo com o modo selecionado */}
-                {storyDisplayMode === "jornalzinho" ? (
-                  <JornalzinhoView
+                {storyDisplayMode === "livro" ? (
+                  <LivroInfantilView
                     story={story}
+                    formData={lastFormData}
                     isPlayingNarration={isPlayingNarration}
                     currentPlayingChapter={currentPlayingChapter}
                     voiceSettings={voiceSettings}
                     onPlayAll={playFullStory}
+                    onPlayChapter={playSingleChapter}
                     onStopNarration={stopNarration}
                     onRegenerateImage={handleRegenerateSingleImage}
                     onRegenerateAllImages={handleRegenerateAllImages}

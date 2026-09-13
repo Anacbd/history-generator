@@ -3,6 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import "dotenv/config";
+import { generateStorySpeech } from "./server/speechService";
 
 async function startServer() {
   const app = express();
@@ -200,6 +201,30 @@ Retorne a resposta estritamente no formato JSON estruturado de acordo com o esqu
     } catch (err: any) {
       return res.status(500).json({
         error: err?.message || "Falha ao gerar imagem.",
+      });
+    }
+  });
+
+  // Natural AI Speech narration endpoint (Gemini TTS + Humanized Neural Fallback)
+  app.post("/api/generate-speech", async (req, res) => {
+    try {
+      const { text, gender = "female", pace = "storyteller" } = req.body;
+
+      if (!text || typeof text !== "string" || !text.trim()) {
+        return res.status(400).json({ error: "Texto para narração é obrigatório." });
+      }
+
+      const result = await generateStorySpeech(ai, {
+        text,
+        gender: gender === "male" ? "male" : "female",
+        pace,
+      });
+
+      return res.json(result);
+    } catch (err: any) {
+      console.error("Erro na geração de fala:", err);
+      return res.status(500).json({
+        error: err?.message || "Não foi possível gerar a narração de voz com IA.",
       });
     }
   });

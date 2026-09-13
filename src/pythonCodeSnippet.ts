@@ -315,48 +315,33 @@ if "dados_historia" in st.session_state:
     with col_meta2:
         st.info(f"**🎨 Guia Visual da Personagem:** {dados.get('character_visual_notes', '')}")
 
-    st.write("### 🗞️ Escolha o Modo de Visualização")
+    st.write("### 📖 Escolha o Modo de Visualização")
     
-    tab_jornal, tab_storyboard = st.tabs([
-        "📰 Modo Jornalzinho Infantil (A Gazeta das Crianças)",
+    tab_livro, tab_storyboard = st.tabs([
+        "📖 Modo Livro Infantil Ilustrado",
         "🎬 Modo Storyboard & Prompts de IA (Midjourney / DALL-E)"
     ])
 
     chapters = dados.get("chapters", [])
     
     # -------------------------------------------------------------
-    # ABA 1: MODO JORNALZINHO INFANTIL (DIAGRAMAÇÃO DE JORNAL)
+    # ABA 1: MODO LIVRO INFANTIL ILUSTRADO
     # -------------------------------------------------------------
-    with tab_jornal:
+    with tab_livro:
         st.markdown(f"""
-        <div style="background-color: #FCF9F2; border: 2px solid #D8CEBA; border-radius: 16px; padding: 2rem; font-family: serif; color: #24211E; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-            <div style="border-bottom: 2px solid #24211E; padding-bottom: 6px; font-family: monospace; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px; display: flex; justify-content: space-between; color: #5C5346;">
-                <span>✨ EDIÇÃO ESPECIAL INFANTIL • ANO I</span>
-                <span>PREÇO: 1 GRANDE SORRISO</span>
-            </div>
-            <div style="text-align: center; border-bottom: 4px double #24211E; padding: 1.5rem 0 1rem 0; margin-bottom: 1.5rem;">
-                <div style="font-size: 0.8rem; font-family: sans-serif; font-weight: bold; letter-spacing: 4px; color: #7A6E5C; text-transform: uppercase;">
-                    O Semanário dos Sonhos e da Imaginação
+        <div style="background-color: #F9F5EB; border: 4px solid #5A3825; border-radius: 20px; padding: 2.5rem; font-family: serif; color: #2B1B10; box-shadow: 0 10px 25px rgba(0,0,0,0.08);">
+            <div style="text-align: center; border-bottom: 2px solid #D8C7B0; padding-bottom: 1.5rem; margin-bottom: 2rem;">
+                <div style="font-size: 0.85rem; font-family: sans-serif; font-weight: bold; letter-spacing: 3px; color: #8C6239; text-transform: uppercase;">
+                    ✨ Livro Infantil Ilustrado • Edição Especial
                 </div>
-                <h1 style="font-size: 2.8rem; font-weight: 900; margin: 0.5rem 0; text-transform: uppercase; color: #1A1815;">
-                    O Diário Encantado
-                </h1>
-                <p style="font-style: italic; color: #5C5346; margin: 0;">
-                    "Notícias do Reino da Fantasia • Lições de Amor e Coragem para Pequenos Leitores"
-                </p>
-            </div>
-            <div style="text-align: center; margin-bottom: 1.5rem;">
-                <h2 style="font-size: 1.9rem; font-weight: bold; color: #1E1B18; margin-bottom: 0.5rem;">
+                <h1 style="font-size: 2.8rem; font-weight: 900; margin: 0.6rem 0; color: #3A2213;">
                     {dados.get('title', 'A Grande Aventura')}
-                </h2>
-                <p style="font-size: 1.1rem; font-style: italic; color: #4A4337; max-width: 800px; margin: auto;">
+                </h1>
+                <p style="font-style: italic; font-size: 1.15rem; color: #5F4532; max-width: 750px; margin: auto;">
                     "{dados.get('synopsis', '')}"
                 </p>
             </div>
-        </div>
         """, unsafe_allow_html=True)
-
-        st.markdown("<br>", unsafe_allow_html=True)
 
         for i, cap in enumerate(chapters):
             col_img, col_txt = st.columns([1, 1.2])
@@ -365,23 +350,24 @@ if "dados_historia" in st.session_state:
             img_url = f"https://image.pollinations.ai/prompt/{prompt_encoded}%2C%20storybook%20illustration%2C%20soft%20warm%20colors?width=800&height=600&seed={seed_img}&model=flux&nologo=true"
 
             with col_img:
-                st.image(img_url, caption=f"Ilustração Oficial: {cap.get('scene_description', '')}", use_container_width=True)
+                st.image(img_url, caption=f"Cena: {cap.get('scene_description', '')}", use_container_width=True)
             
             with col_txt:
-                st.markdown(f"### 📰 Ato {cap.get('chapter_number', i+1)}: {cap.get('chapter_title', '')}")
+                st.markdown(f"### 📖 Capítulo {cap.get('chapter_number', i+1)}: {cap.get('chapter_title', '')}")
                 st.markdown(f"""
-                <div style="font-size: 1.1rem; line-height: 1.8; color: #2B2723; font-family: serif; text-align: justify;">
+                <div style="font-size: 1.15rem; line-height: 1.85; color: #3E291A; font-family: serif; text-align: justify;">
                     {cap.get('story_text', '')}
                 </div>
                 """, unsafe_allow_html=True)
             st.divider()
 
         st.markdown(f"""
-        <div style="background-color: #EFE7D2; border: 2px solid #D1C4AB; border-radius: 12px; padding: 1.2rem; font-family: serif;">
-            <h4 style="margin: 0 0 0.5rem 0; font-size: 1.2rem; color: #241F18;">❤️ EDITORIAL: A Lição do Dia</h4>
-            <p style="font-style: italic; font-size: 1.05rem; margin: 0; color: #3B3428;">
-                "{dados.get('moral_lesson', '')}"
-            </p>
+            <div style="background-color: #FFF9ED; border: 2px solid #E6D2B5; border-radius: 16px; padding: 1.5rem; text-align: center;">
+                <h4 style="margin: 0 0 0.5rem 0; font-size: 1.25rem; color: #3A2213;">⭐ A Lição Deste Livro</h4>
+                <p style="font-style: italic; font-size: 1.1rem; margin: 0; color: #4A3320; font-weight: bold;">
+                    "{dados.get('moral_lesson', '')}"
+                </p>
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
